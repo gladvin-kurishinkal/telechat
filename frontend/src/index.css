@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-tg-dark: #17212b;
+  --color-tg-panel: #242f3d;
+  --color-tg-blue: #2b5278;
+  --color-tg-blue-hover: #3b6b98;
+  --color-tg-divider: #0e1621;
+
+  --color-tg-text: #f5f5f5;
+  --color-tg-muted: #7f91a4;
+  --color-tg-hover: #1f2936;
+
+  --color-tg-badge: #4fa5e3;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-tg-dark text-tg-text antialiased overflow-hidden h-screen w-screen m-0 p-0;
+  }
+
+  #root {
+    @apply h-full w-full flex;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-tg-hover rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-tg-muted;
+  }
+}
