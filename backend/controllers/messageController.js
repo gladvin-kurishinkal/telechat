@@ -73,14 +73,56 @@ exports.getMessages = async (req, res) => {
             .sort({ createdAt: 1 }); // Oldest first
 
         // Mark messages as read since the user is opening the conversation
-        await Message.updateMany(
+        const result = await Message.updateMany(
             { conversationId: conversation._id, senderId: targetUserId, read: false },
             { $set: { read: true } }
         );
 
+        if (result.modifiedCount > 0) {
+            const { getReceiverSocketId, io } = require('../socket/socket');
+            const receiverSocketId = getReceiverSocketId(targetUserId);
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit('messagesRead', { conversationId: conversation._id });
+            }
+        }
+
         res.status(200).json(messages);
     } catch (error) {
         console.error('Error fetching messages:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// @route   POST /api/messages/mark-read/:id
+// @desc    Mark all messages in a conversation as read by target user ID
+exports.markMessagesAsRead = async (req, res) => {
+    try {
+        const { id: targetUserId } = req.params;
+        const currentUserId = req.user._id;
+
+        const conversation = await Conversation.findOne({
+            participants: { $all: [currentUserId, targetUserId] },
+        });
+
+        if (!conversation) return res.status(200).json({ message: 'Conversation not found' });
+
+        const result = await Message.updateMany(
+            { conversationId: conversation._id, senderId: targetUserId, read: false },
+            { $set: { read: true } }
+        );
+
+        if (result.modifiedCount > 0) {
+            const { getReceiverSocketId, io } = require('../socket/socket');
+            const receiverSocketId = getReceiverSocketId(targetUserId);
+            if (receiverSocketId) {
+                // Tell the person who sent the messages that we've read them
+                io.to(receiverSocketId).emit('messagesRead', { conversationId: conversation._id });
+            }
+        }
+
+        res.status(200).json({ status: 'ok', modifiedCount: result.modifiedCount });
+    } catch (error) {
+        console.error('Error marking messages as read:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
@@ -99,13 +141,13 @@ exports.getConversations = async (req, res) => {
             .sort({ updatedAt: -1 });
 
         // Format for frontend (filter out self from participants)
-        const activeConversations = conversations.filter(conv => 
+        const activeConversations = conversations.filter(conv =>
             conv.participants.some(p => p._id.toString() !== currentUserId.toString())
         );
 
         const formattedConversations = await Promise.all(activeConversations.map(async conv => {
             const partner = conv.participants.find(p => p._id.toString() !== currentUserId.toString());
-            
+
             const unreadCount = await Message.countDocuments({
                 conversationId: conv._id,
                 read: false,

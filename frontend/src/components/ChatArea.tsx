@@ -33,9 +33,24 @@ const ChatArea = () => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    const handleSendMessage = (text: string) => {
+    const handleSendMessage = (text: string, file: File | null) => {
         if (!activeConversationUser) return;
-        sendMessage(activeConversationUser._id, { text });
+
+        let data: FormData | { text: string };
+
+        if (file) {
+            data = new FormData();
+            data.append('text', text);
+            if (file.type.startsWith('image/')) {
+                data.append('image', file);
+            } else if (file.type.startsWith('video/')) {
+                data.append('video', file);
+            }
+        } else {
+            data = { text };
+        }
+
+        sendMessage(activeConversationUser._id, data);
     };
 
     if (!activeConversationUser) {
@@ -108,8 +123,11 @@ const ChatArea = () => {
                                 id={msg._id}
                                 senderId={msg.senderId}
                                 text={msg.text}
+                                image={msg.image}
+                                video={msg.video}
                                 timestamp={new Date(msg.createdAt)}
                                 isOwnMsg={msg.senderId === user?._id}
+                                isRead={msg.read}
                             />
                         ))}
                     </div>

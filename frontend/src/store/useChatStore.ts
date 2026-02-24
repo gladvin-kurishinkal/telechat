@@ -8,6 +8,7 @@ export interface Message {
     text: string;
     image: string;
     video: string;
+    read?: boolean;
     createdAt: string;
 }
 
@@ -38,6 +39,8 @@ interface ChatState {
     getMessages: (userId: string) => Promise<void>;
     sendMessage: (userId: string, data: any) => Promise<void>;
     setActiveConversationUser: (user: any) => void;
+    markMessagesAsRead: (userId: string) => Promise<void>;
+
     // Socket actions
     subscribeToMessages: () => void;
     unsubscribeFromMessages: () => void;
@@ -52,6 +55,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     isUsersLoading: false,
     isMessagesLoading: false,
     isSending: false,
+
+    markMessagesAsRead: async (userId: string) => {
+        try {
+            await axiosInstance.post(`/messages/mark-read/${userId}`);
+        } catch (error) {
+            console.error('Error marking messages as read:', error);
+        }
+    },
 
     getUsers: async (search = '') => {
         set({ isUsersLoading: true });
@@ -147,12 +158,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const socket = getSocket();
         if (!socket) return;
         socket.on('newMessage', (newMessage: Message) => {
-            const { activeConversationUser, messages, conversations, getConversations } = get();
+            const { activeConversationUser, messages, conversations, getConversations, markMessagesAsRead } = get();
 
             const isActive = activeConversationUser && newMessage.senderId === activeConversationUser._id;
 
             if (isActive) {
-                set({ messages: [...messages, newMessage] });
+                // If we are actively chatting with the sender, mark it as read immediately locally
+                const messageWithReadStatus = { ...newMessage, read: true };
+                set({ messages: [...messages, messageWithReadStatus] });
+                // Also tell the server so it emits the messagesRead event back to the sender
+                markMessagesAsRead(newMessage.senderId);
             }
 
             // Update conversations list locally
@@ -174,12 +189,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 getConversations();
             }
         });
+
+        // Listen for when other user reads our messages
+        socket.on('messagesRead', ({ conversationId }) => {
+            const { messages, activeConversationUser, conversations } = get();
+
+            // Check if this read event applies to our currently open conversation
+            // We find the conversation in our list to see if it matches the active user
+            const currentConv = conversations.find(c => c._id === conversationId);
+            const isCurrentlyActiveConversation = currentConv && activeConversationUser && currentConv.partner._id === activeConversationUser._id;
+
+            if (isCurrentlyActiveConversation) {
+                // Update all messages sent by us in the active chat to be read
+                const updatedMessages = messages.map(msg =>
+                    msg.senderId !== activeConversationUser._id ? { ...msg, read: true } : msg
+                );
+                set({ messages: updatedMessages });
+            }
+        });
     },
 
     unsubscribeFromMessages: () => {
         const socket = getSocket();
         if (!socket) return;
         socket.off('newMessage');
+        socket.off('messagesRead');
     },
 
     addMessage: (message) => {

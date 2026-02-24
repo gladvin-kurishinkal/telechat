@@ -1,9 +1,12 @@
 const express = require('express');
 const { protect } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
-const { sendMessage, getMessages, getConversations } = require('../controllers/messageController');
+const { sendMessage, getMessages, getConversations, markMessagesAsRead } = require('../controllers/messageController');
 
 const router = express.Router();
+
+// Mark messages as read for a specific user ID
+router.post('/mark-read/:id', protect, markMessagesAsRead);
 
 // Get active conversations (for sidebar)
 router.get('/conversations', protect, getConversations);
