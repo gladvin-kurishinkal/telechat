@@ -20,6 +20,7 @@ export interface Conversation {
         profilePic: string;
     };
     lastMessage?: Message;
+    unreadCount?: number;
 }
 
 interface ChatState {
@@ -90,7 +91,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         try {
             // data might be FormData if images/videos, or just JSON
             const res = await axiosInstance.post(`/messages/send/${userId}`, data);
-            set((state) => ({ messages: [...state.messages, res.data] }));
+            const newMessage = res.data;
+
+            set((state) => {
+                const updatedConversations = [...state.conversations];
+                const convIndex = updatedConversations.findIndex(c => c.partner._id === userId);
+
+                if (convIndex !== -1) {
+                    const conv = { ...updatedConversations[convIndex], lastMessage: newMessage };
+                    updatedConversations.splice(convIndex, 1);
+                    updatedConversations.unshift(conv);
+                }
+
+                return {
+                    messages: [...state.messages, newMessage],
+                    conversations: updatedConversations
+                };
+            });
+
+            // Sync conversations in background to get real conversation ID if it was temporary
+            get().getConversations();
         } catch (error) {
             console.error('Error sending message:', error);
         } finally {
@@ -99,19 +119,60 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     setActiveConversationUser: (user) => {
-        set({ activeConversationUser: user });
+        const { conversations } = get();
+
+        let exists = false;
+        const updatedConversations = conversations.map(c => {
+            if (c.partner._id === user._id) {
+                exists = true;
+                return { ...c, unreadCount: 0 };
+            }
+            return c;
+        });
+
+        if (!exists) {
+            updatedConversations.unshift({
+                _id: `temp_${user._id}`,
+                partner: user,
+            });
+        }
+
+        set({
+            activeConversationUser: user,
+            conversations: updatedConversations
+        });
     },
 
     subscribeToMessages: () => {
         const socket = getSocket();
         if (!socket) return;
         socket.on('newMessage', (newMessage: Message) => {
-            // If we are currently chatting with the sender, add it to our array immediately.
-            const { activeConversationUser, messages } = get();
-            if (activeConversationUser && newMessage.senderId === activeConversationUser._id) {
+            const { activeConversationUser, messages, conversations, getConversations } = get();
+
+            const isActive = activeConversationUser && newMessage.senderId === activeConversationUser._id;
+
+            if (isActive) {
                 set({ messages: [...messages, newMessage] });
             }
-            // Also potentially trigger fetchConversations to update the list, or do it locally
+
+            // Update conversations list locally
+            const updatedConversations = [...conversations];
+            const convIndex = updatedConversations.findIndex(
+                c => c.partner._id === newMessage.senderId
+            );
+
+            if (convIndex !== -1) {
+                const conv = { ...updatedConversations[convIndex] };
+                conv.lastMessage = newMessage;
+                if (!isActive) {
+                    conv.unreadCount = (conv.unreadCount || 0) + 1;
+                }
+                updatedConversations.splice(convIndex, 1);
+                updatedConversations.unshift(conv);
+                set({ conversations: updatedConversations });
+            } else {
+                getConversations();
+            }
         });
     },
 

@@ -72,6 +72,12 @@ exports.getMessages = async (req, res) => {
         const messages = await Message.find({ conversationId: conversation._id })
             .sort({ createdAt: 1 }); // Oldest first
 
+        // Mark messages as read since the user is opening the conversation
+        await Message.updateMany(
+            { conversationId: conversation._id, senderId: targetUserId, read: false },
+            { $set: { read: true } }
+        );
+
         res.status(200).json(messages);
     } catch (error) {
         console.error('Error fetching messages:', error);
@@ -93,14 +99,26 @@ exports.getConversations = async (req, res) => {
             .sort({ updatedAt: -1 });
 
         // Format for frontend (filter out self from participants)
-        const formattedConversations = conversations.map(conv => {
+        const activeConversations = conversations.filter(conv => 
+            conv.participants.some(p => p._id.toString() !== currentUserId.toString())
+        );
+
+        const formattedConversations = await Promise.all(activeConversations.map(async conv => {
             const partner = conv.participants.find(p => p._id.toString() !== currentUserId.toString());
+            
+            const unreadCount = await Message.countDocuments({
+                conversationId: conv._id,
+                read: false,
+                senderId: partner._id
+            });
+
             return {
-                _id: conv._id,
+                _id: conv._id, // Conversation ID
                 partner,
-                lastMessage: conv.lastMessage
-            }
-        }).filter(conv => conv.partner); // Just in case
+                lastMessage: conv.lastMessage,
+                unreadCount
+            };
+        }));
 
         res.status(200).json(formattedConversations);
     } catch (error) {

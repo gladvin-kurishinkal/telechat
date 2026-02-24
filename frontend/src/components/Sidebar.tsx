@@ -95,10 +95,15 @@ const Sidebar = () => {
                                     )}
                                 </div>
 
-                                <div className="flex justify-between items-center gap-2">
+                                <div className="flex justify-between items-center gap-2 mt-0.5">
                                     <span className={`text-[14px] truncate ${isActive ? 'text-white/90' : 'text-tg-muted'}`}>
                                         {item.lastMessage ? item.lastMessage.text || '📷 Media' : user.email}
                                     </span>
+                                    {item.unreadCount > 0 && !isActive && (
+                                        <div className="bg-[#3390ec] text-white text-[12px] font-medium px-1.5 min-w-[20px] h-[20px] rounded-full flex items-center justify-center shrink-0">
+                                            {item.unreadCount}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

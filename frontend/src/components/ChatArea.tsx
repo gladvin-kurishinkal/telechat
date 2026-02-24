@@ -22,7 +22,7 @@ const ChatArea = () => {
         if (activeConversationUser) {
             getMessages(activeConversationUser._id);
         }
-    }, [activeConversationUser?._id, getMessages]);
+    }, [activeConversationUser, getMessages]);
 
     useEffect(() => {
         subscribeToMessages();
