@@ -117,4 +117,4 @@ telechat/
 
 ## License
 
-ISC
+GPL-3.0 license
